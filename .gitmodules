@@ -1,0 +1,3 @@
+[submodule "src/wolfinaboxutils"]
+	path = src/wolfinaboxutils
+	url = https://github.com/wolfinabox/wolfinaboxutils.git
