@@ -3,12 +3,22 @@
 # Author: wolfinabox
 # GitHub: https://github.com/wolfinabox/Entropy-API
 #========================================================#
+from .cache import *
+from .gateway import Gateway
+from .httpclient import HTTPClient
 import asyncio
 import json
 from types import SimpleNamespace
-from .httpclient import HTTPClient
-from .gateway import Gateway
-from .cache import *
+import sys
+import logging
+import coloredlogs
+#Set up logging
+logger = logging.getLogger('discord')
+logger.addHandler(logging.FileHandler('entropy.log'))
+logger.addHandler(logging.StreamHandler(sys.stdout))
+logger.setLevel(logging.DEBUG)
+coloredlogs.install(level='DEBUG',logger=logger,fmt='%(asctime)s %(message)s')
+
 
 
 class LoginError(Exception):
@@ -37,7 +47,7 @@ class DiscordClient(object):
         self.discord_data = None
         self.cache = None
         self.login_info = login_info
-        self.loop=None
+        self.loop = None
 
     def start(self):
         """
@@ -45,7 +55,8 @@ class DiscordClient(object):
         """
         self.loop = asyncio.get_event_loop()
         # QUESTIONABLE?
-        self.loop.run_until_complete(self._start())
+        asyncio.ensure_future(self._start())
+        self.loop.run_forever()
 
     async def _start(self):
         # Try to login
@@ -75,7 +86,6 @@ class DiscordClient(object):
         self.gateway = Gateway(self.token, gateway_url, self.loop)
         # QUESTIONABLE?
         await self.gateway.setup()
-        print('look at meee') #THIS NEVER HAPPENS IF LINE 64 IN GATEWAY.PY IS AWAITED...
 
     async def get_me(self):
         """
