@@ -12,6 +12,9 @@ from types import SimpleNamespace
 import sys
 import logging
 import coloredlogs
+
+from threading import Thread #TODO: PUT ALL THE ASYNC SHIT IN ITS OWN THREAD, START THE LOOP THERE? IDK MAN
+
 #Set up logging
 logger = logging.getLogger('discord')
 logger.addHandler(logging.FileHandler('entropy.log'))
@@ -20,14 +23,17 @@ logger.setLevel(logging.DEBUG)
 coloredlogs.install(level='DEBUG',logger=logger,fmt='%(asctime)s %(message)s')
 
 
-
 class LoginError(Exception):
+    """
+    Exception thrown when the Discord client was unable to login using the given credentials.
+    """
     pass
 
 
 class DiscordClient(object):
     """
-    A Discord client
+    A Discord client. Handles all connections to and from the Discord API.\n
+    See documentation here https://discordapp.com/developers/docs/intro
     """
     urls = SimpleNamespace(
         main_url='https://discordapp.com',
@@ -41,21 +47,20 @@ class DiscordClient(object):
     user_agent = 'Entropy (https://github.com/wolfinabox/Entropy-API)'
 
     def __init__(self, login_info):
-        self.token = None
-        self.gateway = None
+        self.token:str = None
+        self.gateway:Gateway = None
         self.http = HTTPClient()
-        self.discord_data = None
+        self.discord_data:dict = None
         self.cache = None
         self.login_info = login_info
-        self.loop = None
+        self.loop = asyncio.get_event_loop()
 
     def start(self):
         """
         Start the client
         """
-        self.loop = asyncio.get_event_loop()
-        # QUESTIONABLE?
         asyncio.ensure_future(self._start())
+        #TODO QUESTIONABLE? THIS "BLOCKS" ANY NON-ASYNC OPERATION IN TEST.PY. FIX
         self.loop.run_forever()
 
     async def _start(self):
@@ -76,6 +81,8 @@ class DiscordClient(object):
         if me is not None:
             print(
                 f'Successfully logged in as "{me["username"]}#{me["discriminator"]}"!')
+        else:
+            raise LoginError('Couldn\'t log in')
 
         # Start Gateway
         gateway_url = cache_get('gateway_url')
@@ -84,9 +91,9 @@ class DiscordClient(object):
             gateway_url = gateway_url['url']
             cache_put('gateway_url', gateway_url)
         self.gateway = Gateway(self.token, gateway_url, self.loop)
-        # QUESTIONABLE?
         await self.gateway.setup()
 
+    #PROBABLY A TEMP FUNCTION
     async def get_me(self):
         """
         Get the current logged in user from Discord.\n

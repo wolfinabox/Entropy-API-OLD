@@ -3,6 +3,9 @@
 # Author: wolfinabox
 # GitHub: https://github.com/wolfinabox/Entropy-API
 #========================================================#
+from .cache import *
+from .utils import get_os
+from .wolfinaboxutils.formatting import truncate
 import websockets
 from socket import gaierror
 import threading
@@ -11,11 +14,7 @@ import json
 from threading import Timer
 import random
 import logging
-logger=logging.getLogger('discord')
-from .wolfinaboxutils.formatting import truncate
-from .utils import get_os
-from .cache import *
-
+logger = logging.getLogger('discord')
 
 
 class Gateway(object):
@@ -61,10 +60,6 @@ class Gateway(object):
         Setup the gateway
         """
         self.ws = await websockets.connect(self.gateway_url, compression=None)
-        self.connected = True
-        # QUESTIONABLE?
-        # IF I AWAIT THIS, IT KEEPS RUNNING, BUT "BLOCKS"
-        # IF I DON'T AWAIT THIS, LOOP ONLY RUNS ONCE
         asyncio.ensure_future(self._run())
 
     async def disconnect(self, reason: str = ''):
@@ -72,9 +67,9 @@ class Gateway(object):
         Disconnect the gateway.\n
         `reason` The reason to send for the disconnection. Default empty.
         """
-        
+
         logger.warn('Gateway disconnected! ' +
-                     (f'Reason: {reason}' if reason else ''))
+                    (f'Reason: {reason}' if reason else ''))
         self.heartbeat_timer.cancel()
         await self.ws.close(reason=reason)
 
@@ -84,6 +79,7 @@ class Gateway(object):
         `data` A dictionary to be send. Should contain at least:\n
         {op,d}
         """
+        # If the websocket is not open
         if self.ws is None or self.ws.closed:
             logger.warn(f'Send Queued: {data}')
             self.send_queue.append(data)
@@ -92,8 +88,10 @@ class Gateway(object):
         if type(data) != str:
             data = json.dumps(data)
 
+        # Try to send the data
         try:
             await self.ws.send(data)
+        # If the websocket wasn't able to send (connection closed, probably)
         except websockets.ConnectionClosed as e:
             logger.warn(f'Send Queued: {data}')
             self.send_queue.append(data)
@@ -109,6 +107,7 @@ class Gateway(object):
         """
         logger.debug(f'GOT EVENT: {data["t"]}')
 
+        # EVENTS
         # Ready event
         async def ready_t():
             # json.dump(data,open('READY_EXAMPLE.json','w'),indent=4)
@@ -132,11 +131,14 @@ class Gateway(object):
         await handlers.get(data['t'], unknown_t)()
 
     async def _handle_message(self, data: dict):
-        # truncate(data,125,"...")}')
+        """
+        Handle a message sent from the Discord API.\n
+        `data` The data received through the gateway.
+        """
         logger.debug(f'RECEIVED: op[{data["op"]}] ({self.opcodes.get(data["op"],"UNKNOWN")})'+(
             f', s[{data["s"]}]' if data["s"] is not None else ""))
-        # Opcode handler functions
 
+        # OPCODES
         # Dispatch (most events)
         async def op0():
             await self._handle_event(data)
@@ -148,9 +150,10 @@ class Gateway(object):
                 # temp
                 await asyncio.sleep(random.randint(1, 5))
                 await self._identify()
-            # TEMPORARY
             else:
+                # TEMPORARY (obviously)
                 logger.error('Cannot resume from INVALID SESSION! PANIC!!!!!')
+                raise ConnectionError('Cannot resume from INVALID SESSION')
 
         # Hello
         async def op10():
@@ -167,6 +170,7 @@ class Gateway(object):
 
         async def unknown_op():
             logger.warn(f'Unhandled opcode "{data["op"]}"!')
+
         # Handlers for each opcode
         handlers = {
             0: op0,
@@ -185,6 +189,7 @@ class Gateway(object):
             try:
                 res = await self.ws.recv()
             except websockets.ConnectionClosed as e:
+                # if self.ws.closed: break
                 logger.error(f'Gateway closed! Code = {e.code} ({e.reason})')
                 await self.disconnect()
                 asyncio.ensure_future(self._resume())
@@ -193,6 +198,9 @@ class Gateway(object):
                 await self._handle_message(json.loads(res))
 
     async def _resume(self):
+        """
+        Attempt to resume the gateway connection after a disconnect
+        """
         reconnect_packet = {
             'op': 6,
             'd': {
@@ -201,7 +209,9 @@ class Gateway(object):
                 'seq': self.last_sequence
             }
         }
-
+        #Close codes said to require another identify
+        if self.ws.close_code in (4007, 4009):
+            self.identified = False
         # Keep trying to reconnect
         while self.ws.closed:
             logger.debug('Trying to resume gateway...')
@@ -222,17 +232,19 @@ class Gateway(object):
 
     def _heartbeat(self, heartbeat_stop: threading.Event):
         """
-        Heartbeat
+        Heartbeat connection
         """
+        #If we haven't received a pong response since the last heartbeat ping, PANIC (I mean reconnect)
         if not self.heartbeat_acked:
             logger.error('No heartbeat ACK received!')
             asyncio.ensure_future(self.disconnect())
             asyncio.ensure_future(self._resume())
             return
         self.heartbeat_acked = False
+        #Send Heartbeat
         asyncio.ensure_future(self._send({
             'op': 1,
-            'd': self.last_sequence  # if self.last_sequence is not None else 'null'
+            'd': self.last_sequence
         }), loop=self.loop)
         if not heartbeat_stop.is_set():
             self.heartbeat_timer = threading.Timer(float(self.heartbeat_ms)/1000.00,
@@ -240,6 +252,9 @@ class Gateway(object):
             self.heartbeat_timer.start()
 
     async def _identify(self):
+        """
+        Send an identify packet to Discord
+        """
         await self._send({
             'op': 2,
             'd': {
