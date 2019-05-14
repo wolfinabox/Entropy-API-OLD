@@ -36,7 +36,7 @@ class Gateway(object):
     }
 
     # Amount of time (in s) to sleep between _resume attempts upon disconnection
-    sleep_resume = 1
+    sleep_resume = 5
 
     def __init__(self, token: str, gateway_url: str, loop):
         # Data
@@ -113,6 +113,8 @@ class Gateway(object):
             # json.dump(data,open('READY_EXAMPLE.json','w'),indent=4)
             self.session_id = data['d']['session_id']
             cache_put('clientinfo', data['d'])
+            test=cache_get('clientinfo.notes.560021188861100064')
+            
 
         async def resume_t():
             logger.debug('Successfully resumed')
@@ -143,6 +145,18 @@ class Gateway(object):
         async def op0():
             await self._handle_event(data)
 
+        # Heartbeat Request
+        async def op1():
+            await self._heartbeat(onetime=True)
+        
+        #Reconnect Request
+        async def op7():
+            logger.error(f'Gateway closed! (API requested reconnect)')
+            await self.disconnect()
+            self.identified=False
+            asyncio.ensure_future(self._resume())
+            
+        
         # Invalid Session
         async def op9():
             # If session is resumable
@@ -174,6 +188,7 @@ class Gateway(object):
         # Handlers for each opcode
         handlers = {
             0: op0,
+            1:op1,
             9: op9,
             10: op10,
             11: op11
@@ -209,7 +224,7 @@ class Gateway(object):
                 'seq': self.last_sequence
             }
         }
-        #Close codes said to require another identify
+        # Close codes said to require another identify
         if self.ws.close_code in (4007, 4009):
             self.identified = False
         # Keep trying to reconnect
@@ -230,23 +245,23 @@ class Gateway(object):
         while self.send_queue:
             await self._send(self.send_queue.pop(0))
 
-    def _heartbeat(self, heartbeat_stop: threading.Event):
+    def _heartbeat(self, heartbeat_stop: threading.Event, onetime=False):
         """
         Heartbeat connection
         """
-        #If we haven't received a pong response since the last heartbeat ping, PANIC (I mean reconnect)
+        # If we haven't received a pong response since the last heartbeat ping, PANIC (I mean reconnect)
         if not self.heartbeat_acked:
             logger.error('No heartbeat ACK received!')
             asyncio.ensure_future(self.disconnect())
             asyncio.ensure_future(self._resume())
             return
         self.heartbeat_acked = False
-        #Send Heartbeat
+        # Send Heartbeat
         asyncio.ensure_future(self._send({
             'op': 1,
             'd': self.last_sequence
         }), loop=self.loop)
-        if not heartbeat_stop.is_set():
+        if not heartbeat_stop.is_set() and not onetime:
             self.heartbeat_timer = threading.Timer(float(self.heartbeat_ms)/1000.00,
                                                    self._heartbeat, [heartbeat_stop])
             self.heartbeat_timer.start()

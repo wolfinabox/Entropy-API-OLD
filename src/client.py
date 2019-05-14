@@ -3,13 +3,18 @@
 # Author: wolfinabox
 # GitHub: https://github.com/wolfinabox/Entropy-API
 #========================================================#
+__version__='0.0.1'
+if __name__=='__main__':
+    print(f'Entropy v{__version__} https://github.com/wolfinabox/Entropy-API')
+    quit()
+
+import sys
 from .cache import *
 from .gateway import Gateway
 from .httpclient import HTTPClient
 import asyncio
 import json
 from types import SimpleNamespace
-import sys
 import logging
 import coloredlogs
 
@@ -47,18 +52,21 @@ class DiscordClient(object):
     user_agent = 'Entropy (https://github.com/wolfinabox/Entropy-API)'
 
     def __init__(self, login_info):
-        self.token:str = None
-        self.gateway:Gateway = None
-        self.http = HTTPClient()
-        self.discord_data:dict = None
-        self.cache = None
         self.login_info = login_info
-        self.loop = asyncio.get_event_loop()
+        self.thread=Thread(target=self.start)
+        self.thread.start()
 
     def start(self):
         """
         Start the client
         """
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.token:str = None
+        self.gateway:Gateway = None
+        self.http = HTTPClient(self.loop)
+        self.discord_data:dict = None
+        self.cache = None
         asyncio.ensure_future(self._start())
         #TODO QUESTIONABLE? THIS "BLOCKS" ANY NON-ASYNC OPERATION IN TEST.PY. FIX
         self.loop.run_forever()

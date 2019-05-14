@@ -1,7 +1,7 @@
 #My Stuff
 creds.json
 examples/
-
+.*.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -12,8 +12,9 @@ logger = logging.getLogger('discord')
 
 
 class HTTPClient(object):
-    def __init__(self):
+    def __init__(self,loop):
         self.http_session = aiohttp.ClientSession()
+        self.loop=loop
 
     async def close(self):
         """
@@ -36,7 +37,7 @@ class HTTPClient(object):
         """
         # Reopen HTTP session if it's closed
         if self.http_session.closed:
-            self.http_session = aiohttp.ClientSession()
+            self.http_session = aiohttp.ClientSession(loop=loop)
 
         start_time = datetime.now()
         resp = None
