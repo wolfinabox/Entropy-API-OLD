@@ -21,11 +21,14 @@ import coloredlogs
 from threading import Thread #TODO: PUT ALL THE ASYNC SHIT IN ITS OWN THREAD, START THE LOOP THERE? IDK MAN
 
 #Set up logging
-logger = logging.getLogger('discord')
-logger.addHandler(logging.FileHandler('entropy.log'))
-logger.addHandler(logging.StreamHandler(sys.stdout))
-logger.setLevel(logging.DEBUG)
-coloredlogs.install(level='DEBUG',logger=logger,fmt='%(asctime)s %(message)s')
+logger = logging.getLogger('entropy-client')
+log_names=['entropy-client','entropy-gateway','entropy-httpclient']
+for tmp in log_names:
+    tmp=logging.getLogger(tmp)
+    tmp.addHandler(logging.FileHandler('entropy.log'))
+    tmp.addHandler(logging.StreamHandler(sys.stdout))
+    tmp.setLevel(logging.DEBUG)
+    coloredlogs.install(level='DEBUG',logger=tmp,fmt='%(asctime)s %(name)s - %(message)s')
 
 
 class LoginError(Exception):
@@ -35,7 +38,7 @@ class LoginError(Exception):
     pass
 
 
-class DiscordClient(object):
+class DiscordClient(Thread):
     """
     A Discord client. Handles all connections to and from the Discord API.\n
     See documentation here https://discordapp.com/developers/docs/intro
@@ -53,10 +56,10 @@ class DiscordClient(object):
 
     def __init__(self, login_info):
         self.login_info = login_info
-        self.thread=Thread(target=self.start)
-        self.thread.start()
+        Thread.__init__(self)
+        self.start()
 
-    def start(self):
+    def run(self):
         """
         Start the client
         """
@@ -67,9 +70,14 @@ class DiscordClient(object):
         self.http = HTTPClient(self.loop)
         self.discord_data:dict = None
         self.cache = None
-        asyncio.ensure_future(self._start())
-        #TODO QUESTIONABLE? THIS "BLOCKS" ANY NON-ASYNC OPERATION IN TEST.PY. FIX
-        self.loop.run_forever()
+        #TODO WANT TO CATCH EXCEPTIONS HERE, OR IN TEST.PY.
+        #NOT WORKING
+        try:
+            asyncio.ensure_future(self._start(),loop=self.loop)
+            self.loop.run_forever()
+        except Exception:
+            logger.error('Username/Password incorrect!')
+            raise
 
     async def _start(self):
         # Try to login
@@ -82,7 +90,6 @@ class DiscordClient(object):
             token = token['token']
             cache_put('token', token)
         self.token = token
-
         # Test me
         me = await self.get_me()
 

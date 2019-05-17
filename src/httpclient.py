@@ -8,7 +8,7 @@ from .utils import fmt_time
 import aiohttp
 import json
 import logging
-logger = logging.getLogger('discord')
+logger = logging.getLogger('entropy-httpclient')
 
 
 class HTTPClient(object):
@@ -35,11 +35,11 @@ class HTTPClient(object):
         `json` Whether to parse the results into JSON. Default `True`.\n
         `Returns` None if request failed, otherwise the gathered data in a string or JSON object.
         """
+        start_time = datetime.now()
         # Reopen HTTP session if it's closed
         if self.http_session.closed:
             self.http_session = aiohttp.ClientSession(loop=loop)
 
-        start_time = datetime.now()
         resp = None
         # Modify headers
         headers = kwargs.get('headers', {})

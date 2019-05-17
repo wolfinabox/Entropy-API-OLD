@@ -6,6 +6,7 @@
 from .cache import *
 from .utils import get_os
 from .wolfinaboxutils.formatting import truncate
+from datetime import datetime
 import websockets
 from socket import gaierror
 import threading
@@ -14,7 +15,7 @@ import json
 from threading import Timer
 import random
 import logging
-logger = logging.getLogger('discord')
+logger = logging.getLogger('entropy-gateway')
 
 
 class Gateway(object):
@@ -47,9 +48,11 @@ class Gateway(object):
         self.identified = False
         # Heartbeat Stuff
         self.heartbeat_ms = 0
-        self.heartbeat_acked = True
         self.heartbeat_stop = threading.Event()
         self.heartbeat_timer: threading.Timer = None
+        self.latency=0
+        self.last_heartbeat_ack=datetime.now()
+        self.last_heartbeat_sent=datetime.now()
         # Structure
         self.loop = loop
         self.ws: websockets.WebSocketClientProtocol = None
@@ -180,7 +183,9 @@ class Gateway(object):
 
         # Heartbeat ACK
         async def op11():
-            self.heartbeat_acked = True
+            self.last_heartbeat_ack=datetime.now()
+            self.latency=(self.last_heartbeat_ack-self.last_heartbeat_sent)
+            logger.debug(f'Latency: {fmt_time(self.latency)}')
 
         async def unknown_op():
             logger.warn(f'Unhandled opcode "{data["op"]}"!')
@@ -250,12 +255,14 @@ class Gateway(object):
         Heartbeat connection
         """
         # If we haven't received a pong response since the last heartbeat ping, PANIC (I mean reconnect)
-        if not self.heartbeat_acked:
+        if not onetime and self.last_heartbeat_ack is None:
             logger.error('No heartbeat ACK received!')
-            asyncio.ensure_future(self.disconnect())
+            asyncio.ensure_future(self.disconnect('123'))
             asyncio.ensure_future(self._resume())
             return
-        self.heartbeat_acked = False
+        #Calculate Latency
+        self.last_heartbeat_sent=datetime.now()
+        self.last_heartbeat_ack = None
         # Send Heartbeat
         asyncio.ensure_future(self._send({
             'op': 1,
